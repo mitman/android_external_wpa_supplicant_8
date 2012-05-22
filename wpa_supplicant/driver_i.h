@@ -467,6 +467,15 @@ static inline int wpa_drv_probe_req_report(struct wpa_supplicant *wpa_s,
 	return -1;
 }
 
+static inline int wpa_drv_disable_11b_rates(struct wpa_supplicant *wpa_s,
+					    int disabled)
+{
+	if (wpa_s->driver->disable_11b_rates)
+		return wpa_s->driver->disable_11b_rates(wpa_s->drv_priv,
+							disabled);
+	return -1;
+}
+
 static inline int wpa_drv_deinit_ap(struct wpa_supplicant *wpa_s)
 {
 	if (wpa_s->driver->deinit_ap)

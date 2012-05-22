@@ -127,7 +127,7 @@ void p2p_process_invitation_req(struct p2p_data *p2p, const u8 *sa,
 
 	dev = p2p_get_device(p2p, sa);
 	if (dev == NULL || (dev->flags & P2P_DEV_PROBE_REQ_ONLY)) {
-		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
+		wpa_msg(p2p->cfg->msg_ctx, MSG_INFO,
 			"P2P: Invitation Request from unknown peer "
 			MACSTR, MAC2STR(sa));
 
@@ -473,6 +473,8 @@ int p2p_invite(struct p2p_data *p2p, const u8 *peer, enum p2p_invite_role role,
 		p2p->channels.reg_class[0].reg_class = p2p->op_reg_class;
 		p2p->channels.reg_class[0].channel[0] = p2p->op_channel;
 	} else {
+		p2p->op_reg_class = p2p->cfg->op_reg_class;
+		p2p->op_channel = p2p->cfg->op_channel;
 		os_memcpy(&p2p->channels, &p2p->cfg->channels,
 			  sizeof(struct p2p_channels));
 	}

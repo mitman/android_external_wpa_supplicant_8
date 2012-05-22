@@ -55,11 +55,43 @@ static void p2p_expire_peers(struct p2p_data *p2p)
 {
 	struct p2p_device *dev, *n;
 	struct os_time now;
+	size_t i;
 
 	os_get_time(&now);
 	dl_list_for_each_safe(dev, n, &p2p->devices, struct p2p_device, list) {
 		if (dev->last_seen.sec + P2P_PEER_EXPIRATION_AGE >= now.sec)
 			continue;
+
+		wpa_printf(MSG_INFO, "%s check for device_name:%s, p2p_dev_addr:" MACSTR, __FUNCTION__
+			, dev->info.device_name
+			, MAC2STR(dev->info.p2p_device_addr)
+		);
+
+		if (p2p->cfg->go_connected &&
+		    p2p->cfg->go_connected(p2p->cfg->cb_ctx,
+					   dev->info.p2p_device_addr)) {
+			/*
+			 * We are connected as a client to a group in which the
+			 * peer is the GO, so do not expire the peer entry.
+			 */
+			os_get_time(&dev->last_seen);
+			continue;
+		}
+
+		for (i = 0; i < p2p->num_groups; i++) {			
+			if (p2p_group_is_client_connected(
+				    p2p->groups[i], dev->info.p2p_device_addr))
+				break;
+		}
+		if (i < p2p->num_groups) {
+			/*
+			 * The peer is connected as a client in a group where
+			 * we are the GO, so do not expire the peer entry.
+			 */
+			os_get_time(&dev->last_seen);
+			continue;
+		}
+
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Expiring old peer "
 			"entry " MACSTR, MAC2STR(dev->info.p2p_device_addr));
 		dl_list_del(&dev->list);
@@ -567,7 +599,7 @@ int p2p_add_device(struct p2p_data *p2p, const u8 *addr, int freq, int level,
 	}
 
 	if (dev->listen_freq && dev->listen_freq != freq) {
-		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
+		wpa_msg(p2p->cfg->msg_ctx, MSG_INFO,
 			"P2P: Update Listen frequency based on scan "
 			"results (" MACSTR " %d -> %d MHz (DS param %d)",
 			MAC2STR(dev->info.p2p_device_addr), dev->listen_freq,
@@ -948,7 +980,7 @@ void p2p_stop_find(struct p2p_data *p2p)
 }
 
 
-int p2p_prepare_channel(struct p2p_data *p2p, unsigned int force_freq)
+static int p2p_prepare_channel(struct p2p_data *p2p, unsigned int force_freq)
 {
 	if (force_freq) {
 		u8 op_reg_class, op_channel;
@@ -1196,8 +1228,8 @@ void p2p_add_dev_info(struct p2p_data *p2p, const u8 *addr,
 				msg->listen_channel[2],
 				msg->listen_channel[3],
 				msg->listen_channel[4]);
-		} else {
-			wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Update "
+		} else if(dev->listen_freq != freq){
+			wpa_msg(p2p->cfg->msg_ctx, MSG_INFO, "P2P: Update "
 				"peer " MACSTR " Listen channel: %u -> %u MHz",
 				MAC2STR(dev->info.p2p_device_addr),
 				dev->listen_freq, freq);
@@ -1211,7 +1243,7 @@ void p2p_add_dev_info(struct p2p_data *p2p, const u8 *addr,
 			"P2P: Completed device entry based on data from "
 			"GO Negotiation Request");
 	} else {
-		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
+		wpa_msg(p2p->cfg->msg_ctx, MSG_INFO,
 			"P2P: Created device entry based on GO Neg Req: "
 			MACSTR " dev_capab=0x%x group_capab=0x%x name='%s' "
 			"listen_freq=%d",
@@ -1538,7 +1570,7 @@ static void p2p_add_dev_from_probe_req(struct p2p_data *p2p, const u8 *addr,
 
 	p2p_parse_free(&msg);
 
-	wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
+	wpa_msg(p2p->cfg->msg_ctx, MSG_INFO,
 		"P2P: Created device entry based on Probe Req: " MACSTR
 		" dev_capab=0x%x group_capab=0x%x name='%s' listen_freq=%d",
 		MAC2STR(dev->info.p2p_device_addr), dev->info.dev_capab,
@@ -1653,30 +1685,6 @@ struct wpabuf * p2p_build_probe_resp_ies(struct p2p_data *p2p)
 }
 
 
-static int is_11b(u8 rate)
-{
-	return rate == 0x02 || rate == 0x04 || rate == 0x0b || rate == 0x16;
-}
-
-
-static int supp_rates_11b_only(struct ieee802_11_elems *elems)
-{
-	int num_11b = 0, num_others = 0;
-	int i;
-
-	if (elems->supp_rates == NULL && elems->ext_supp_rates == NULL)
-		return 0;
-
-	for (i = 0; elems->supp_rates && i < elems->supp_rates_len; i++) {
-		if (is_11b(elems->supp_rates[i]))
-			num_11b++;
-		else
-			num_others++;
-	}
-
-	return num_11b > 0 && num_others == 0;
-}
-
 static void p2p_reply_probe(struct p2p_data *p2p, const u8 *addr, const u8 *ie,
 			    size_t ie_len)
 {
@@ -1706,11 +1714,6 @@ static void p2p_reply_probe(struct p2p_data *p2p, const u8 *addr, const u8 *ie,
 	    os_memcmp(elems.ssid, P2P_WILDCARD_SSID, P2P_WILDCARD_SSID_LEN) !=
 	    0) {
 		/* not using P2P Wildcard SSID - ignore */
-		return;
-	}
-
-	if (supp_rates_11b_only(&elems)) {
-		/* Indicates support for 11b rates only */
 		return;
 	}
 

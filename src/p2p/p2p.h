@@ -710,6 +710,15 @@ struct p2p_config {
 	 * local failure in transmitting the Invitation Request.
 	 */
 	void (*invitation_result)(void *ctx, int status, const u8 *bssid);
+
+	/**
+	 * go_connected - Check whether we are connected to a GO
+	 * @ctx: Callback context from cb_ctx
+	 * @dev_addr: P2P Device Address of a GO
+	 * Returns: 1 if we are connected as a P2P client to the specified GO
+	 * or 0 if not.
+	 */
+	int (*go_connected)(void *ctx, const u8 *dev_addr);
 };
 
 
@@ -1490,6 +1499,14 @@ unsigned int p2p_get_group_num_members(struct p2p_group *group);
 const u8 * p2p_iterate_group_members(struct p2p_group *group, void **next);
 
 /**
+ * p2p_group_is_client_connected - Check whether a specific client is connected
+ * @group: P2P group context from p2p_group_init()
+ * @addr: P2P Device Address of the client
+ * Returns: 1 if client is connected or 0 if not
+ */
+int p2p_group_is_client_connected(struct p2p_group *group, const u8 *dev_addr);
+
+/**
  * p2p_get_peer_found - Get P2P peer info structure of a found peer
  * @p2p: P2P module context from p2p_init()
  * @addr: P2P Device Address of the peer or %NULL to indicate the first peer
@@ -1527,7 +1544,5 @@ int p2p_add_wps_vendor_extension(struct p2p_data *p2p,
  */
 int p2p_set_oper_channel(struct p2p_data *p2p, u8 op_reg_class, u8 op_channel,
 			 int cfg_op_channel);
-
-int p2p_prepare_channel(struct p2p_data *p2p, unsigned int force_freq);
 
 #endif /* P2P_H */

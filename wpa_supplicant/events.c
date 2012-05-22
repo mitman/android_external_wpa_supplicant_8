@@ -130,6 +130,9 @@ void wpa_supplicant_mark_disassoc(struct wpa_supplicant *wpa_s)
 	bssid_changed = !is_zero_ether_addr(wpa_s->bssid);
 	os_memset(wpa_s->bssid, 0, ETH_ALEN);
 	os_memset(wpa_s->pending_bssid, 0, ETH_ALEN);
+#ifdef CONFIG_P2P
+	os_memset(wpa_s->go_dev_addr, 0, ETH_ALEN);
+#endif /* CONFIG_P2P */
 	wpa_s->current_bss = NULL;
 	wpa_s->assoc_freq = 0;
 #ifdef CONFIG_IEEE80211R
@@ -450,7 +453,7 @@ static int wpa_supplicant_ssid_bss_match(struct wpa_supplicant *wpa_s,
 		return 0;
 	}
 
-	if (!wpa_key_mgmt_wpa(ssid->key_mgmt) && (!wpa_ie && !rsn_ie)) {
+	if (!wpa_key_mgmt_wpa(ssid->key_mgmt)) {
 		wpa_dbg(wpa_s, MSG_DEBUG, "   allow in non-WPA/WPA2");
 		return 1;
 	}
@@ -592,10 +595,9 @@ static struct wpa_ssid * wpa_scan_res_match(struct wpa_supplicant *wpa_s,
 			continue;
 		}
 
-		if ((bss->caps & IEEE80211_CAP_IBSS) &&
-				ssid->mode != IEEE80211_MODE_IBSS) {
+		if (bss->caps & IEEE80211_CAP_IBSS) {
 			wpa_dbg(wpa_s, MSG_DEBUG, "   skip - IBSS (adhoc) "
-				"mismatch");
+				"network");
 			continue;
 		}
 
@@ -993,7 +995,6 @@ static int _wpa_supplicant_event_scan_results(struct wpa_supplicant *wpa_s,
 		skip = !wpa_supplicant_need_to_roam(wpa_s, selected, ssid,
 						    scan_res);
 		wpa_scan_results_free(scan_res);
-		wpa_supplicant_rsn_preauth_scan_results(wpa_s);
 		if (skip)
 			return 0;
 #ifdef ANDROID_BRCM_P2P_PATCH
@@ -1004,6 +1005,7 @@ static int _wpa_supplicant_event_scan_results(struct wpa_supplicant *wpa_s,
 #else
 		wpa_supplicant_connect(wpa_s, selected, ssid);
 #endif
+		wpa_supplicant_rsn_preauth_scan_results(wpa_s);
 	} else {
 		wpa_scan_results_free(scan_res);
 		wpa_dbg(wpa_s, MSG_DEBUG, "No suitable network found");
